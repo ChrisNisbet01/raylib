@@ -354,7 +354,8 @@ struct rAudioBuffer {
 // Audio processor struct
 // NOTE: Useful to apply effects to an AudioBuffer
 struct rAudioProcessor {
-    AudioCallback process;          // Processor callback function
+    AudioCallbackUserCtx process;   // Processor callback function with user context
+    void * userCtx;                 // User context passed to callback
     rAudioProcessor *next;          // Next audio processor on the list
     rAudioProcessor *prev;          // Previous audio processor on the list
 };
@@ -2144,47 +2145,46 @@ void SetAudioStreamCallback(AudioStream stream, AudioCallback callback)
     if (stream.buffer != NULL) stream.buffer->callback = callback;
 }
 
-// Add processor to audio stream. Contrary to buffers, the order of processors is important.
-// The new processor must be added at the end. As there aren't supposed to be a lot of processors attached to
-// a given stream, we iterate through the list to find the end. That way we don't need a pointer to the last element.
-void AttachAudioStreamProcessor(AudioStream stream, AudioCallback process)
+static void AttachAudioProcessor_(rAudioProcessor **head, rAudioProcessor *processor)
 {
     ma_mutex_lock(&AUDIO.System.lock);
 
-    rAudioProcessor *processor = (rAudioProcessor *)RL_CALLOC(1, sizeof(rAudioProcessor));
-    processor->process = process;
+    rAudioProcessor **last = head;
+    rAudioProcessor *tail = NULL;
 
-    rAudioProcessor *last = stream.buffer->processor;
-
-    while (last && last->next)
+    while (*last)
     {
-        last = last->next;
+        tail = *last;
+        last = &tail->next;
     }
-    if (last)
-    {
-        processor->prev = last;
-        last->next = processor;
-    }
-    else stream.buffer->processor = processor;
+    if (tail) processor->prev = tail;
+    *last = processor;
 
     ma_mutex_unlock(&AUDIO.System.lock);
 }
 
-// Remove processor from audio stream
-void DetachAudioStreamProcessor(AudioStream stream, AudioCallback process)
+static void
+AudioProcessorNoUserCtx(void * userCtx, void * bufferData, unsigned int frames)
+{
+    AudioCallback cb = userCtx;
+
+    cb(bufferData, frames);
+}
+
+static void DetachAudioProcessor_(rAudioProcessor **head, AudioCallback process)
 {
     ma_mutex_lock(&AUDIO.System.lock);
 
-    rAudioProcessor *processor = stream.buffer->processor;
+    rAudioProcessor *processor = *head;
 
     while (processor)
     {
         rAudioProcessor *next = processor->next;
         rAudioProcessor *prev = processor->prev;
-
-        if (processor->process == process)
+        if ((processor->process == AudioProcessorNoUserCtx && processor->userCtx == process)
+            || processor->process == (AudioCallbackUserCtx)process)
         {
-            if (stream.buffer->processor == processor) stream.buffer->processor = next;
+            if (*head == processor) *head = next;
             if (prev) prev->next = next;
             if (next) next->prev = prev;
 
@@ -2195,6 +2195,36 @@ void DetachAudioStreamProcessor(AudioStream stream, AudioCallback process)
     }
 
     ma_mutex_unlock(&AUDIO.System.lock);
+}
+
+// Add processor to audio stream. Contrary to buffers, the order of processors is important.
+// The new processor must be added at the end. As there aren't supposed to be a lot of processors attached to
+// a given stream, we iterate through the list to find the end. That way we don't need a pointer to the last element.
+void AttachAudioStreamProcessorUserCtx(AudioStream stream, AudioCallbackUserCtx process, void *userCtx)
+{
+    rAudioProcessor *processor = (rAudioProcessor *)RL_CALLOC(1, sizeof(*processor));
+
+    processor->process = process;
+    processor->userCtx = userCtx;
+    AttachAudioProcessor_(&stream.buffer->processor, processor);
+}
+
+// Add processor to audio stream. Contrary to buffers, the order of processors is important.
+// The new processor must be added at the end. As there aren't supposed to be a lot of processors attached to
+// a given stream, we iterate through the list to find the end. That way we don't need a pointer to the last element.
+void AttachAudioStreamProcessor(AudioStream stream, AudioCallback process)
+{
+    rAudioProcessor *processor = (rAudioProcessor *)RL_CALLOC(1, sizeof(*processor));
+
+    processor->process = AudioProcessorNoUserCtx;
+    processor->userCtx = process;
+    AttachAudioProcessor_(&stream.buffer->processor, processor);
+}
+
+// Remove processor from audio stream
+void DetachAudioStreamProcessor(AudioStream stream, AudioCallback process)
+{
+    DetachAudioProcessor_(&stream.buffer->processor, process);
 }
 
 // Add processor to audio pipeline. Order of processors is important
@@ -2202,52 +2232,17 @@ void DetachAudioStreamProcessor(AudioStream stream, AudioCallback process)
 // these two work on the already mixed output just before sending it to the sound hardware
 void AttachAudioMixedProcessor(AudioCallback process)
 {
-    ma_mutex_lock(&AUDIO.System.lock);
+    rAudioProcessor *processor = (rAudioProcessor *)RL_CALLOC(1, sizeof(*processor));
 
-    rAudioProcessor *processor = (rAudioProcessor *)RL_CALLOC(1, sizeof(rAudioProcessor));
-    processor->process = process;
-
-    rAudioProcessor *last = AUDIO.mixedProcessor;
-
-    while (last && last->next)
-    {
-        last = last->next;
-    }
-    if (last)
-    {
-        processor->prev = last;
-        last->next = processor;
-    }
-    else AUDIO.mixedProcessor = processor;
-
-    ma_mutex_unlock(&AUDIO.System.lock);
+    processor->process = AudioProcessorNoUserCtx;
+    processor->userCtx = process;
+    AttachAudioProcessor_(&AUDIO.mixedProcessor, processor);
 }
 
 // Remove processor from audio pipeline
 void DetachAudioMixedProcessor(AudioCallback process)
 {
-    ma_mutex_lock(&AUDIO.System.lock);
-
-    rAudioProcessor *processor = AUDIO.mixedProcessor;
-
-    while (processor)
-    {
-        rAudioProcessor *next = processor->next;
-        rAudioProcessor *prev = processor->prev;
-
-        if (processor->process == process)
-        {
-            if (AUDIO.mixedProcessor == processor) AUDIO.mixedProcessor = next;
-            if (prev) prev->next = next;
-            if (next) next->prev = prev;
-
-            RL_FREE(processor);
-        }
-
-        processor = next;
-    }
-
-    ma_mutex_unlock(&AUDIO.System.lock);
+    DetachAudioProcessor_(&AUDIO.mixedProcessor, process);
 }
 
 
@@ -2450,7 +2445,7 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
                         rAudioProcessor *processor = audioBuffer->processor;
                         while (processor)
                         {
-                            processor->process(framesIn, framesJustRead);
+                            processor->process(processor->userCtx, framesIn, framesJustRead);
                             processor = processor->next;
                         }
 
@@ -2494,7 +2489,7 @@ static void OnSendAudioDataToDevice(ma_device *pDevice, void *pFramesOut, const 
     rAudioProcessor *processor = AUDIO.mixedProcessor;
     while (processor)
     {
-        processor->process(pFramesOut, frameCount);
+        processor->process(processor->userCtx, pFramesOut, frameCount);
         processor = processor->next;
     }
 
