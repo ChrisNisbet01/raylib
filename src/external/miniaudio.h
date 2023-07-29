@@ -57133,7 +57133,7 @@ MA_API ma_result ma_data_source_set_range_in_pcm_frames(ma_data_source* pDataSou
     pDataSourceBase->loopBegInFrames = 0;
     pDataSourceBase->loopEndInFrames = ~((ma_uint64)0);
 
-    
+
     /*
     Seek to within range. Note that our seek positions here are relative to the new range. We don't want
     do do this if we failed to retrieve the cursor earlier on because it probably means the data source
@@ -84299,21 +84299,21 @@ static drflac_result drflac__decode_flac_frame(drflac* pFlac)
         return DRFLAC_ERROR;
     }
     for (i = 0; i < channelCount; ++i) {
-        if (!drflac__decode_subframe(&pFlac->bs, &pFlac->currentFLACFrame, i, pFlac->pDecodedSamples + (pFlac->currentFLACFrame.header.blockSizeInPCMFrames * i))) {
+        if (!drflac__decode_subframe(&pFlac->biases, &pFlac->currentFLACFrame, i, pFlac->pDecodedSamples + (pFlac->currentFLACFrame.header.blockSizeInPCMFrames * i))) {
             return DRFLAC_ERROR;
         }
     }
-    paddingSizeInBits = (drflac_uint8)(DRFLAC_CACHE_L1_BITS_REMAINING(&pFlac->bs) & 7);
+    paddingSizeInBits = (drflac_uint8)(DRFLAC_CACHE_L1_BITS_REMAINING(&pFlac->biases) & 7);
     if (paddingSizeInBits > 0) {
         drflac_uint8 padding = 0;
-        if (!drflac__read_uint8(&pFlac->bs, paddingSizeInBits, &padding)) {
+        if (!drflac__read_uint8(&pFlac->biases, paddingSizeInBits, &padding)) {
             return DRFLAC_AT_END;
         }
     }
 #ifndef DR_FLAC_NO_CRC
-    actualCRC16 = drflac__flush_crc16(&pFlac->bs);
+    actualCRC16 = drflac__flush_crc16(&pFlac->biases);
 #endif
-    if (!drflac__read_uint16(&pFlac->bs, 16, &desiredCRC16)) {
+    if (!drflac__read_uint16(&pFlac->biases, 16, &desiredCRC16)) {
         return DRFLAC_AT_END;
     }
 #ifndef DR_FLAC_NO_CRC
@@ -84334,17 +84334,17 @@ static drflac_result drflac__seek_flac_frame(drflac* pFlac)
 #endif
     channelCount = drflac__get_channel_count_from_channel_assignment(pFlac->currentFLACFrame.header.channelAssignment);
     for (i = 0; i < channelCount; ++i) {
-        if (!drflac__seek_subframe(&pFlac->bs, &pFlac->currentFLACFrame, i)) {
+        if (!drflac__seek_subframe(&pFlac->biases, &pFlac->currentFLACFrame, i)) {
             return DRFLAC_ERROR;
         }
     }
-    if (!drflac__seek_bits(&pFlac->bs, DRFLAC_CACHE_L1_BITS_REMAINING(&pFlac->bs) & 7)) {
+    if (!drflac__seek_bits(&pFlac->biases, DRFLAC_CACHE_L1_BITS_REMAINING(&pFlac->biases) & 7)) {
         return DRFLAC_ERROR;
     }
 #ifndef DR_FLAC_NO_CRC
-    actualCRC16 = drflac__flush_crc16(&pFlac->bs);
+    actualCRC16 = drflac__flush_crc16(&pFlac->biases);
 #endif
-    if (!drflac__read_uint16(&pFlac->bs, 16, &desiredCRC16)) {
+    if (!drflac__read_uint16(&pFlac->biases, 16, &desiredCRC16)) {
         return DRFLAC_AT_END;
     }
 #ifndef DR_FLAC_NO_CRC
@@ -84359,7 +84359,7 @@ static drflac_bool32 drflac__read_and_decode_next_flac_frame(drflac* pFlac)
     DRFLAC_ASSERT(pFlac != NULL);
     for (;;) {
         drflac_result result;
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
         result = drflac__decode_flac_frame(pFlac);
@@ -84397,7 +84397,7 @@ static drflac_bool32 drflac__seek_to_first_frame(drflac* pFlac)
 {
     drflac_bool32 result;
     DRFLAC_ASSERT(pFlac != NULL);
-    result = drflac__seek_to_byte(&pFlac->bs, pFlac->firstFLACFramePosInBytes);
+    result = drflac__seek_to_byte(&pFlac->biases, pFlac->firstFLACFramePosInBytes);
     DRFLAC_ZERO_MEMORY(&pFlac->currentFLACFrame, sizeof(pFlac->currentFLACFrame));
     pFlac->currentPCMFrame = 0;
     return result;
@@ -84438,7 +84438,7 @@ static drflac_bool32 drflac__seek_to_pcm_frame__brute_force(drflac* pFlac, drfla
     if (pcmFrameIndex >= pFlac->currentPCMFrame) {
         runningPCMFrameCount = pFlac->currentPCMFrame;
         if (pFlac->currentPCMFrame == 0 && pFlac->currentFLACFrame.pcmFramesRemaining == 0) {
-            if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+            if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
                 return DRFLAC_FALSE;
             }
         } else {
@@ -84449,7 +84449,7 @@ static drflac_bool32 drflac__seek_to_pcm_frame__brute_force(drflac* pFlac, drfla
         if (!drflac__seek_to_first_frame(pFlac)) {
             return DRFLAC_FALSE;
         }
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
     }
@@ -84497,7 +84497,7 @@ static drflac_bool32 drflac__seek_to_pcm_frame__brute_force(drflac* pFlac, drfla
             }
         }
     next_iteration:
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
     }
@@ -84513,7 +84513,7 @@ static drflac_bool32 drflac__seek_to_approximate_flac_frame_to_byte(drflac* pFla
     *pLastSuccessfulSeekOffset = pFlac->firstFLACFramePosInBytes;
     for (;;) {
         drflac_uint64 lastTargetByte = targetByte;
-        if (!drflac__seek_to_byte(&pFlac->bs, targetByte)) {
+        if (!drflac__seek_to_byte(&pFlac->biases, targetByte)) {
             if (targetByte == 0) {
                 drflac__seek_to_first_frame(pFlac);
                 return DRFLAC_FALSE;
@@ -84689,8 +84689,8 @@ static drflac_bool32 drflac__seek_to_pcm_frame__seek_table(drflac* pFlac, drflac
                 byteRangeHi = pFlac->firstFLACFramePosInBytes + pFlac->pSeekpoints[iNextSeekpoint].flacFrameOffset - 1;
             }
         }
-        if (drflac__seek_to_byte(&pFlac->bs, pFlac->firstFLACFramePosInBytes + pFlac->pSeekpoints[iClosestSeekpoint].flacFrameOffset)) {
-            if (drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (drflac__seek_to_byte(&pFlac->biases, pFlac->firstFLACFramePosInBytes + pFlac->pSeekpoints[iClosestSeekpoint].flacFrameOffset)) {
+            if (drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
                 drflac__get_pcm_frame_range_of_current_flac_frame(pFlac, &pFlac->currentPCMFrame, NULL);
                 if (drflac__seek_to_pcm_frame__binary_search_internal(pFlac, pcmFrameIndex, byteRangeLo, byteRangeHi)) {
                     return DRFLAC_TRUE;
@@ -84702,7 +84702,7 @@ static drflac_bool32 drflac__seek_to_pcm_frame__seek_table(drflac* pFlac, drflac
     if (pcmFrameIndex >= pFlac->currentPCMFrame && pFlac->pSeekpoints[iClosestSeekpoint].firstPCMFrame <= pFlac->currentPCMFrame) {
         runningPCMFrameCount = pFlac->currentPCMFrame;
         if (pFlac->currentPCMFrame == 0 && pFlac->currentFLACFrame.pcmFramesRemaining == 0) {
-            if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+            if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
                 return DRFLAC_FALSE;
             }
         } else {
@@ -84710,10 +84710,10 @@ static drflac_bool32 drflac__seek_to_pcm_frame__seek_table(drflac* pFlac, drflac
         }
     } else {
         runningPCMFrameCount = pFlac->pSeekpoints[iClosestSeekpoint].firstPCMFrame;
-        if (!drflac__seek_to_byte(&pFlac->bs, pFlac->firstFLACFramePosInBytes + pFlac->pSeekpoints[iClosestSeekpoint].flacFrameOffset)) {
+        if (!drflac__seek_to_byte(&pFlac->biases, pFlac->firstFLACFramePosInBytes + pFlac->pSeekpoints[iClosestSeekpoint].flacFrameOffset)) {
             return DRFLAC_FALSE;
         }
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
     }
@@ -84761,7 +84761,7 @@ static drflac_bool32 drflac__seek_to_pcm_frame__seek_table(drflac* pFlac, drflac
             }
         }
     next_iteration:
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
     }
@@ -85238,7 +85238,7 @@ static drflac_bool32 drflac__init_private__native(drflac_init_info* pInit, drfla
         } else {
             pInit->hasStreamInfoBlock = DRFLAC_FALSE;
             pInit->hasMetadataBlocks  = DRFLAC_FALSE;
-            if (!drflac__read_next_flac_frame_header(&pInit->bs, 0, &pInit->firstFrameHeader)) {
+            if (!drflac__read_next_flac_frame_header(&pInit->biases, 0, &pInit->firstFrameHeader)) {
                 return DRFLAC_FALSE;
             }
             if (pInit->firstFrameHeader.bitsPerSample == 0) {
@@ -85692,7 +85692,7 @@ static drflac_bool32 drflac_ogg__seek_to_pcm_frame(drflac* pFlac, drflac_uint64 
     drflac_uint64 runningPCMFrameCount;
     DRFLAC_ASSERT(oggbs != NULL);
     originalBytePos = oggbs->currentBytePos;
-    if (!drflac__seek_to_byte(&pFlac->bs, pFlac->firstFLACFramePosInBytes)) {
+    if (!drflac__seek_to_byte(&pFlac->biases, pFlac->firstFLACFramePosInBytes)) {
         return DRFLAC_FALSE;
     }
     oggbs->bytesRemainingInPage = 0;
@@ -85729,7 +85729,7 @@ static drflac_bool32 drflac_ogg__seek_to_pcm_frame(drflac* pFlac, drflac_uint64 
         drflac_uint64 firstPCMFrameInFLACFrame = 0;
         drflac_uint64 lastPCMFrameInFLACFrame = 0;
         drflac_uint64 pcmFrameCountInThisFrame;
-        if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+        if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
             return DRFLAC_FALSE;
         }
         drflac__get_pcm_frame_range_of_current_flac_frame(pFlac, &firstPCMFrameInFLACFrame, &lastPCMFrameInFLACFrame);
@@ -85896,10 +85896,10 @@ static drflac_bool32 drflac__init_private(drflac_init_info* pInit, drflac_read_p
     pInit->container    = container;
     pInit->pUserData    = pUserData;
     pInit->pUserDataMD  = pUserDataMD;
-    pInit->bs.onRead    = onRead;
-    pInit->bs.onSeek    = onSeek;
-    pInit->bs.pUserData = pUserData;
-    drflac__reset_cache(&pInit->bs);
+    pInit->biases.onRead    = onRead;
+    pInit->biases.onSeek    = onSeek;
+    pInit->biases.pUserData = pUserData;
+    drflac__reset_cache(&pInit->biases);
     relaxed = container != drflac_container_unknown;
     for (;;) {
         if (onRead(pUserData, id, 4) != 4) {
@@ -85953,7 +85953,7 @@ static void drflac__init_from_info(drflac* pFlac, const drflac_init_info* pInit)
     DRFLAC_ASSERT(pFlac != NULL);
     DRFLAC_ASSERT(pInit != NULL);
     DRFLAC_ZERO_MEMORY(pFlac, sizeof(*pFlac));
-    pFlac->bs                      = pInit->bs;
+    pFlac->biases                      = pInit->biases;
     pFlac->onMeta                  = pInit->onMeta;
     pFlac->pUserDataMD             = pInit->pUserDataMD;
     pFlac->maxBlockSizeInPCMFrames = pInit->maxBlockSizeInPCMFrames;
@@ -86057,9 +86057,9 @@ static drflac* drflac_open_with_metadata_private(drflac_read_proc onRead, drflac
         DRFLAC_COPY_MEMORY(pInternalOggbs, pOggbs, sizeof(*pOggbs));
         drflac__free_from_callbacks(pOggbs, &allocationCallbacks);
         pOggbs = NULL;
-        pFlac->bs.onRead = drflac__on_read_ogg;
-        pFlac->bs.onSeek = drflac__on_seek_ogg;
-        pFlac->bs.pUserData = (void*)pInternalOggbs;
+        pFlac->biases.onRead = drflac__on_read_ogg;
+        pFlac->biases.onSeek = drflac__on_seek_ogg;
+        pFlac->biases.pUserData = (void*)pInternalOggbs;
         pFlac->_oggbs = (void*)pInternalOggbs;
     }
 #endif
@@ -86076,12 +86076,12 @@ static drflac* drflac_open_with_metadata_private(drflac_read_proc onRead, drflac
         if (seektablePos != 0) {
             pFlac->seekpointCount = seekpointCount;
             pFlac->pSeekpoints = (drflac_seekpoint*)((drflac_uint8*)pFlac->pDecodedSamples + decodedSamplesAllocationSize);
-            DRFLAC_ASSERT(pFlac->bs.onSeek != NULL);
-            DRFLAC_ASSERT(pFlac->bs.onRead != NULL);
-            if (pFlac->bs.onSeek(pFlac->bs.pUserData, (int)seektablePos, drflac_seek_origin_start)) {
+            DRFLAC_ASSERT(pFlac->biases.onSeek != NULL);
+            DRFLAC_ASSERT(pFlac->biases.onRead != NULL);
+            if (pFlac->biases.onSeek(pFlac->biases.pUserData, (int)seektablePos, drflac_seek_origin_start)) {
                 drflac_uint32 iSeekpoint;
                 for (iSeekpoint = 0; iSeekpoint < seekpointCount; iSeekpoint += 1) {
-                    if (pFlac->bs.onRead(pFlac->bs.pUserData, pFlac->pSeekpoints + iSeekpoint, DRFLAC_SEEKPOINT_SIZE_IN_BYTES) == DRFLAC_SEEKPOINT_SIZE_IN_BYTES) {
+                    if (pFlac->biases.onRead(pFlac->biases.pUserData, pFlac->pSeekpoints + iSeekpoint, DRFLAC_SEEKPOINT_SIZE_IN_BYTES) == DRFLAC_SEEKPOINT_SIZE_IN_BYTES) {
                         pFlac->pSeekpoints[iSeekpoint].firstPCMFrame   = drflac__be2host_64(pFlac->pSeekpoints[iSeekpoint].firstPCMFrame);
                         pFlac->pSeekpoints[iSeekpoint].flacFrameOffset = drflac__be2host_64(pFlac->pSeekpoints[iSeekpoint].flacFrameOffset);
                         pFlac->pSeekpoints[iSeekpoint].pcmFrameCount   = drflac__be2host_16(pFlac->pSeekpoints[iSeekpoint].pcmFrameCount);
@@ -86091,7 +86091,7 @@ static drflac* drflac_open_with_metadata_private(drflac_read_proc onRead, drflac
                         break;
                     }
                 }
-                if (!pFlac->bs.onSeek(pFlac->bs.pUserData, (int)pFlac->firstFLACFramePosInBytes, drflac_seek_origin_start)) {
+                if (!pFlac->biases.onSeek(pFlac->biases.pUserData, (int)pFlac->firstFLACFramePosInBytes, drflac_seek_origin_start)) {
                     drflac__free_from_callbacks(pFlac, &allocationCallbacks);
                     return NULL;
                 }
@@ -86109,7 +86109,7 @@ static drflac* drflac_open_with_metadata_private(drflac_read_proc onRead, drflac
                 break;
             } else {
                 if (result == DRFLAC_CRC_MISMATCH) {
-                    if (!drflac__read_next_flac_frame_header(&pFlac->bs, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
+                    if (!drflac__read_next_flac_frame_header(&pFlac->biases, pFlac->bitsPerSample, &pFlac->currentFLACFrame.header)) {
                         drflac__free_from_callbacks(pFlac, &allocationCallbacks);
                         return NULL;
                     }
@@ -86770,7 +86770,7 @@ DRFLAC_API drflac* drflac_open_memory(const void* pData, size_t dataSize, const 
     else
 #endif
     {
-        pFlac->bs.pUserData = &pFlac->memoryStream;
+        pFlac->biases.pUserData = &pFlac->memoryStream;
     }
     return pFlac;
 }
@@ -86795,7 +86795,7 @@ DRFLAC_API drflac* drflac_open_memory_with_metadata(const void* pData, size_t da
     else
 #endif
     {
-        pFlac->bs.pUserData = &pFlac->memoryStream;
+        pFlac->biases.pUserData = &pFlac->memoryStream;
     }
     return pFlac;
 }
@@ -86821,13 +86821,13 @@ DRFLAC_API void drflac_close(drflac* pFlac)
         return;
     }
 #ifndef DR_FLAC_NO_STDIO
-    if (pFlac->bs.onRead == drflac__on_read_stdio) {
-        fclose((FILE*)pFlac->bs.pUserData);
+    if (pFlac->biases.onRead == drflac__on_read_stdio) {
+        fclose((FILE*)pFlac->biases.pUserData);
     }
 #ifndef DR_FLAC_NO_OGG
     if (pFlac->container == drflac_container_ogg) {
         drflac_oggbs* oggbs = (drflac_oggbs*)pFlac->_oggbs;
-        DRFLAC_ASSERT(pFlac->bs.onRead == drflac__on_read_ogg);
+        DRFLAC_ASSERT(pFlac->biases.onRead == drflac__on_read_ogg);
         if (oggbs->onRead == drflac__on_read_stdio) {
             fclose((FILE*)oggbs->pUserData);
         }
@@ -90475,8 +90475,8 @@ static void drmp3_L3_imdct_gr(float *grbuf, float *overlap, unsigned block_type,
 }
 static void drmp3_L3_save_reservoir(drmp3dec *h, drmp3dec_scratch *s)
 {
-    int pos = (s->bs.pos + 7)/8u;
-    int remains = s->bs.limit/8u - pos;
+    int pos = (s->biases.pos + 7)/8u;
+    int remains = s->biases.limit/8u - pos;
     if (remains > DRMP3_MAX_BITRESERVOIR_BYTES)
     {
         pos += remains - DRMP3_MAX_BITRESERVOIR_BYTES;
@@ -90494,7 +90494,7 @@ static int drmp3_L3_restore_reservoir(drmp3dec *h, drmp3_bs *bs, drmp3dec_scratc
     int bytes_have = DRMP3_MIN(h->reserv, main_data_begin);
     DRMP3_COPY_MEMORY(s->maindata, h->reserv_buf + DRMP3_MAX(0, h->reserv - main_data_begin), DRMP3_MIN(h->reserv, main_data_begin));
     DRMP3_COPY_MEMORY(s->maindata + bytes_have, bs->buf + bs->pos/8, frame_bytes);
-    drmp3_bs_init(&s->bs, s->maindata, bytes_have + frame_bytes);
+    drmp3_bs_init(&s->biases, s->maindata, bytes_have + frame_bytes);
     return h->reserv >= main_data_begin;
 }
 static void drmp3_L3_decode(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *gr_info, int nch)
@@ -90502,9 +90502,9 @@ static void drmp3_L3_decode(drmp3dec *h, drmp3dec_scratch *s, drmp3_L3_gr_info *
     int ch;
     for (ch = 0; ch < nch; ch++)
     {
-        int layer3gr_limit = s->bs.pos + gr_info[ch].part_23_length;
-        drmp3_L3_decode_scalefactors(h->header, s->ist_pos[ch], &s->bs, gr_info + ch, s->scf, ch);
-        drmp3_L3_huffman(s->grbuf[ch], &s->bs, gr_info + ch, s->scf, layer3gr_limit);
+        int layer3gr_limit = s->biases.pos + gr_info[ch].part_23_length;
+        drmp3_L3_decode_scalefactors(h->header, s->ist_pos[ch], &s->biases, gr_info + ch, s->scf, ch);
+        drmp3_L3_huffman(s->grbuf[ch], &s->biases, gr_info + ch, s->scf, layer3gr_limit);
     }
     if (DRMP3_HDR_TEST_I_STEREO(h->header))
     {
